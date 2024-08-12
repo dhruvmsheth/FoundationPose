@@ -7,7 +7,7 @@ exp/
 # C extensions
 *.so
 BundleTrack/build
-storeframes
+storeframes/
 output_frames
 notebooks
 views
