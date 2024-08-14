@@ -14,6 +14,7 @@ from pytorch3d.renderer.mesh.rasterize_meshes import barycentric_coordinates
 from pytorch3d.renderer.mesh.shader import SoftDepthShader, HardFlatShader
 from pytorch3d.renderer.mesh.textures import Textures
 from pytorch3d.structures import Meshes
+from scipy.spatial.transform import Rotation as R
 from scipy.interpolate import griddata
 import nvdiffrast.torch as dr
 import torch.nn.functional as F
@@ -1024,3 +1025,52 @@ def make_yaml_dumpable(D):
         D[d][i] = make_yaml_dumpable(D[d][i])
       continue
   return dict(D)
+
+def perturb_poses(pose_last):
+    pose_last = pose_last.view(4, 4)
+    device = pose_last.device
+    dtype = pose_last.dtype
+    rotation = pose_last[:3, :3]
+    translation = pose_last[:3, 3]
+    directions = torch.tensor([
+        [1, 0, 0],
+        [-1, 0, 0],
+        [0, 1, 0],
+        [0, -1, 0],
+        [0, 0, 1],
+        [0, 0, -1],
+        [1/2**0.5, 1/2**0.5, 0],
+        [1/2**0.5, 0, 1/2**0.5],
+        [0, 1/2**0.5, 1/2**0.5]
+    ], device=device, dtype=dtype)
+    trans_magnitude = 0.1
+    rot_magnitude = torch.deg2rad(torch.tensor(5.0, device=device, dtype=dtype))
+    perturbed_poses = []
+    for direction in directions:
+        perturbed_translation = translation + trans_magnitude * direction
+        rotation_vector = rot_magnitude * direction
+        perturb_rotation = axis_angle_to_matrix(rotation_vector)
+        perturbed_rotation = torch.mm(perturb_rotation, rotation)
+        perturbed_pose = torch.eye(4, device=device, dtype=dtype)
+        perturbed_pose[:3, :3] = perturbed_rotation
+        perturbed_pose[:3, 3] = perturbed_translation
+        perturbed_poses.append(perturbed_pose)
+    return torch.stack(perturbed_poses)
+
+def axis_angle_to_matrix(axis_angle):
+    """Convert axis-angle representation to rotation matrix."""
+    angle = torch.norm(axis_angle)
+    axis = F.normalize(axis_angle, dim=0)
+    cos_angle = torch.cos(angle)
+    sin_angle = torch.sin(angle)
+    cross_product_matrix = torch.tensor([
+        [0, -axis[2], axis[1]],
+        [axis[2], 0, -axis[0]],
+        [-axis[1], axis[0], 0]
+    ], device=axis_angle.device, dtype=axis_angle.dtype)
+
+    R = cos_angle * torch.eye(3, device=axis_angle.device, dtype=axis_angle.dtype) + \
+        sin_angle * cross_product_matrix + \
+        (1 - cos_angle) * torch.ger(axis, axis)
+    
+    return R

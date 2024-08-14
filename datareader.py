@@ -75,6 +75,7 @@ class YcbineoatReader:
     self.K[:2] *= self.downscale
 
     self.gt_pose_files = sorted(glob.glob(f'{self.video_dir}/annotated_poses/*'))
+    self.gt_pose_custom_files = sorted(glob.glob(f'{self.video_dir}/ob_in_cam/*.txt'))
 
     self.videoname_to_object = {
       'bleach0': "021_bleach_cleanser",
@@ -103,6 +104,13 @@ class YcbineoatReader:
       logging.info("GT pose not found, return None")
       return None
 
+  def get_gt_pose_custom(self,i):
+    try:
+      pose = np.loadtxt(self.gt_pose_files[i]).reshape(4,4)
+      return pose
+    except:
+      logging.info("GT pose not found, return None")
+      return None
 
   def get_color(self,i):
     color = imageio.imread(self.color_files[i])[...,:3]

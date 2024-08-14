@@ -251,6 +251,7 @@ class FoundationPose:
     logging.info(f'number of poses are {len(self.poses)}')
     self.scores = scores
     logging.info(f'number of scores are {len(self.scores)}')
+    logging.info(f'scores are {self.scores}')
 
     return best_pose.data.cpu().numpy()
 
@@ -261,6 +262,45 @@ class FoundationPose:
     '''
     return -torch.ones(len(poses), device='cuda', dtype=torch.float)
 
+
+  def track_uq(self, rgb, depth, K, iteration, extra={}, mask=None):
+    if self.pose_last is None:
+      logging.info("Please init pose by register first")
+      raise RuntimeError
+    logging.info("Welcome")
+
+    depth = torch.as_tensor(depth, device='cuda', dtype=torch.float)
+    depth = erode_depth(depth, radius=2, device='cuda')
+    depth = bilateral_filter_depth(depth, radius=2, device='cuda')
+    logging.info("depth processing done")
+
+    xyz_map = depth2xyzmap_batch(depth[None], torch.as_tensor(K, dtype=torch.float, 
+                                                              device='cuda')[None], zfar=np.inf)[0]
+    custom_crops = np.sum(mask) > 10 # use mask only if greater than 10 pixels detected
+    perturbed_poses = perturb_poses(self.pose_last)
+    #logging.info(f"the perturbed poses are {perturbed_poses}")
+
+    # Use the previous self.pose_last and then perturb it to get 9 different positions with a small
+    # threshold
+    logging.info(f"The shape of pose is {self.pose_last.shape}")
+    pose, vis = self.refiner.predict(mesh=self.mesh, mesh_tensors=self.mesh_tensors, rgb=rgb, 
+                                     depth=depth, K=K, ob_in_cams=self.pose_last.reshape(1,4,4).data.cpu().numpy(), 
+                                     normal_map=None, mask=mask, xyz_map=xyz_map, mesh_diameter=self.diameter, glctx=self.glctx, 
+                                     iteration=iteration, get_vis=self.debug>=2, custom_crops=custom_crops)
+    perturbed_poses_refined = []
+    for ppose in perturbed_poses:
+      pose, vis = self.refiner.predict(mesh=self.mesh, mesh_tensors=self.mesh_tensors, rgb=rgb, 
+                                      depth=depth, K=K, ob_in_cams=ppose.reshape(1,4,4).data.cpu().numpy(), 
+                                      normal_map=None, mask=mask, xyz_map=xyz_map, mesh_diameter=self.diameter, glctx=self.glctx, 
+                                      iteration=iteration, get_vis=self.debug>=2, custom_crops=custom_crops) 
+      perturbed_poses_refined.append(pose)
+    logging.info(f"refined output of perturbed poses is {perturbed_poses_refined}")     
+
+    logging.info("pose done")
+    if self.debug>=2:
+      extra['vis'] = vis
+    self.pose_last = pose
+    return (pose@self.get_tf_to_centered_mesh()).data.cpu().numpy().reshape(4,4)
 
   def track_one(self, rgb, depth, K, iteration, extra={}, mask=None):
     if self.pose_last is None:
@@ -276,6 +316,12 @@ class FoundationPose:
     xyz_map = depth2xyzmap_batch(depth[None], torch.as_tensor(K, dtype=torch.float, 
                                                               device='cuda')[None], zfar=np.inf)[0]
     custom_crops = np.sum(mask) > 10 # use mask only if greater than 10 pixels detected
+    #perturbed_poses = perturb_poses(self.pose_last)
+    #logging.info(f"the perturbed poses are {perturbed_poses}")
+
+    # Use the previous self.pose_last and then perturb it to get 9 different positions with a small
+    # threshold
+    #logging.info(f"The shape of pose is {self.pose_last.shape}")
     pose, vis = self.refiner.predict(mesh=self.mesh, mesh_tensors=self.mesh_tensors, rgb=rgb, 
                                      depth=depth, K=K, ob_in_cams=self.pose_last.reshape(1,4,4).data.cpu().numpy(), 
                                      normal_map=None, mask=mask, xyz_map=xyz_map, mesh_diameter=self.diameter, glctx=self.glctx, 
