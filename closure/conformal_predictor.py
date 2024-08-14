@@ -452,7 +452,7 @@ if __name__ == "__main__":
 
     # conformal_predictor.load_dataset("data", "linemod", [9], 200)
 
-    conformal_predictor.load_dataset("data", "linemod", [1, 2, 4, 5, 6, 8, 9], 200)
+    conformal_predictor.load_dataset("datas", "linemod", [0], 200)
     nonconformity_threshold = conformal_predictor.calibrate(epsilon=0.1)
     # test_epsilon = conformal_predictor.test_threshold(nonconformity_threshold)
     conformal_predictor.predict_testset(nonconformity_threshold)

@@ -38,14 +38,15 @@ if __name__=='__main__':
     logging.info("estimator initialization done")
     reader = YcbineoatReader(video_dir=args.test_scene_dir, shorter_side=None, zfar=np.inf)
     
+    video_id = 0
     result = NestDict()
     all_score_result = NestDict()
     all_pose_result = NestDict()
     gt_poses = NestDict()    
     
     for i in range(len(reader.color_files)):
+        id_str = i
         logging.info(f'i:{i}')
-        video_id = reader.get_video_id()
         color = reader.get_color(i)
         depth = reader.get_depth(i)
         gt_pose = reader.get_gt_pose_custom(i)
@@ -74,7 +75,14 @@ if __name__=='__main__':
             mask = reader.get_mask(i).astype(bool)
             pose, perturbed_poses, perturbed_scores = est.track_uq(rgb=color, depth=depth, mask=mask, K=reader.K, iteration=args.track_refine_iter)            
             
-            
+            result[video_id][id_str] = pose
+            all_score_result[video_id][id_str] = perturbed_scores
+            all_pose_result[video_id][id_str] = perturbed_poses
+            gt_poses[video_id][id_str] = gt_pose
+
+            logging.info(f"check the size of score {len(all_score_result[0])}")
+            logging.info(f"check the size of pose {len(all_pose_result[0])}")
+            # logging.info(f"check the size of gt_poses {all_score_result.shape}")
 
             #pose = est.track_one(rgb=color, depth=depth, mask=mask, K=reader.K, iteration=args.track_refine_iter)
         os.makedirs(f'{debug_dir}/ob_in_cam', exist_ok=True)
@@ -88,3 +96,7 @@ if __name__=='__main__':
         if debug>=2:
             os.makedirs(f'{debug_dir}/track_vis', exist_ok=True)
             imageio.imwrite(f'{debug_dir}/track_vis/{reader.id_strs[i]}.png', vis)
+
+    np.save(f'./closure/datas/linemod_out_scores_{video_id}.npy', all_score_result)
+    np.save(f'./closure/datas/linemod_out_poses_{video_id}.npy', all_pose_result)
+    np.save(f'./closure/datas/linemod_gt_poses_{video_id}.npy', gt_poses)

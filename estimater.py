@@ -283,24 +283,55 @@ class FoundationPose:
     # Use the previous self.pose_last and then perturb it to get 9 different positions with a small
     # threshold
     logging.info(f"The shape of pose is {self.pose_last.shape}")
-    pose, vis = self.refiner.predict(mesh=self.mesh, mesh_tensors=self.mesh_tensors, rgb=rgb, 
-                                     depth=depth, K=K, ob_in_cams=self.pose_last.reshape(1,4,4).data.cpu().numpy(), 
-                                     normal_map=None, mask=mask, xyz_map=xyz_map, mesh_diameter=self.diameter, glctx=self.glctx, 
-                                     iteration=iteration, get_vis=self.debug>=2, custom_crops=custom_crops)
-    perturbed_poses_refined = []
-    for ppose in perturbed_poses:
-      pose, vis = self.refiner.predict(mesh=self.mesh, mesh_tensors=self.mesh_tensors, rgb=rgb, 
-                                      depth=depth, K=K, ob_in_cams=ppose.reshape(1,4,4).data.cpu().numpy(), 
-                                      normal_map=None, mask=mask, xyz_map=xyz_map, mesh_diameter=self.diameter, glctx=self.glctx, 
-                                      iteration=iteration, get_vis=self.debug>=2, custom_crops=custom_crops) 
-      perturbed_poses_refined.append(pose)
-    logging.info(f"refined output of perturbed poses is {perturbed_poses_refined}")     
+    perturbed_poses_in = []
+
+    # logging.info(f"Shape of self.pose_last: {self.pose_last.shape}")
+    # logging.info(f"Type of self.pose_last: {type(self.pose_last)}")
+    # logging.info(f"Length of perturbed_poses: {len(perturbed_poses)}")
+    # logging.info(f"Shape of first element in perturbed_poses: {perturbed_poses[0].shape}")
+    # logging.info(f"Type of first element in perturbed_poses: {type(perturbed_poses[0])}")
+
+    # pose, vis = self.refiner.predict(mesh=self.mesh, mesh_tensors=self.mesh_tensors, rgb=rgb, 
+    #                                  depth=depth, K=K, ob_in_cams=self.pose_last.reshape(1,4,4).data.cpu().numpy(), 
+    #                                  normal_map=None, mask=mask, xyz_map=xyz_map, mesh_diameter=self.diameter, glctx=self.glctx, 
+    #                                  iteration=iteration, get_vis=self.debug>=2, custom_crops=custom_crops)
+    # perturbed_poses_in.append(self.pose_last)
+    # perturbed_poses_in.extend(perturbed_poses)
+    # perturbed_poses_in = torch.tensor(perturbed_poses_in)
+
+    logging.info(f"The shape of pose is {self.pose_last.shape}")
+    logging.info(f"Shape of perturbed_poses: {perturbed_poses.shape}")
+
+    # Convert self.pose_last to have an extra dimension
+    pose_last_expanded = self.pose_last.unsqueeze(0)
+
+    # Concatenate along the first dimension
+    perturbed_poses_in = torch.cat([pose_last_expanded, perturbed_poses], dim=0)
+
+    logging.info(f"Shape of perturbed_poses_in: {perturbed_poses_in.shape}")
+
+    pose_p, vis_r = self.refiner.predict(mesh=self.mesh, mesh_tensors=self.mesh_tensors, rgb=rgb, 
+                                    depth=depth, K=K, ob_in_cams=perturbed_poses_in.data.cpu().numpy(), 
+                                    normal_map=None, mask=mask, xyz_map=xyz_map, mesh_diameter=self.diameter, glctx=self.glctx, 
+                                    iteration=iteration, get_vis=self.debug>=2, custom_crops=custom_crops) 
+
+    scores_p, vis_s = self.scorer.predict(mesh=self.mesh, rgb=rgb, depth=depth, K=K, ob_in_cams=pose_p.data.cpu().numpy(), 
+                                          normal_map=None, mesh_tensors=self.mesh_tensors, glctx=self.glctx, 
+                                          mesh_diameter=self.diameter, get_vis=self.debug>=2)
+    
+
+    logging.info(f"refined output of perturbed poses is {pose_p}")     
 
     logging.info("pose done")
+
+    ## Add the three directories, scores, poses, gt_pose for each video frame read. 
+    ## Scores is a 1x10 array, poses is a 1x10 array and gt_pose is a 1 element array
+
     if self.debug>=2:
-      extra['vis'] = vis
-    self.pose_last = pose
-    return (pose@self.get_tf_to_centered_mesh()).data.cpu().numpy().reshape(4,4)
+      extra['vis'] = vis_r
+    self.pose_last = pose_p[0]
+    # 10 perturbed poses and scores for each one of them, therefore 10 scores
+    return (pose_p[0]@self.get_tf_to_centered_mesh()).data.cpu().numpy().reshape(4,4), pose_p.data.cpu().numpy(), scores_p.data.cpu().numpy()
 
   def track_one(self, rgb, depth, K, iteration, extra={}, mask=None):
     if self.pose_last is None:

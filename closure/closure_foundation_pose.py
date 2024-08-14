@@ -1,6 +1,6 @@
 from typing import Tuple
 from cupy._core import ndarray
-from line_profiler import profile
+# from line_profiler import profile
 from closure.gpu_utils import get_successful_idx, get_top_k_perturbation_indices
 from closure_base import ClosureBase
 import cupy as cp

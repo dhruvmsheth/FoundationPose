@@ -75,7 +75,7 @@ class YcbineoatReader:
     self.K[:2] *= self.downscale
 
     self.gt_pose_files = sorted(glob.glob(f'{self.video_dir}/annotated_poses/*'))
-    self.gt_pose_custom_files = sorted(glob.glob(f'{self.video_dir}/ob_in_cam/*.txt'))
+    self.gt_pose_custom_files = sorted(glob.glob(f'{self.video_dir}/ob_in_cam_new/*'))
 
     self.videoname_to_object = {
       'bleach0': "021_bleach_cleanser",
@@ -105,8 +105,9 @@ class YcbineoatReader:
       return None
 
   def get_gt_pose_custom(self,i):
+    logging.info(f"tried {self.gt_pose_custom_files[i]}")
     try:
-      pose = np.loadtxt(self.gt_pose_files[i]).reshape(4,4)
+      pose = np.loadtxt(self.gt_pose_custom_files[i]).reshape(4,4)
       return pose
     except:
       logging.info("GT pose not found, return None")
